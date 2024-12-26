@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Art Marketplace</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.7.3/dist/web3.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f4f4f9;
+      }
+      header {
+        background-color: #333;
+        color: #fff;
+        padding: 1rem;
+        text-align: center;
+      }
+      .container {
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 1rem;
+        background-color: #fff;
+        box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+      }
+      .button {
+        background-color: #4caf50;
+        color: white;
+        padding: 0.5rem 1rem;
+        border: none;
+        cursor: pointer;
+        margin-top: 1rem;
+      }
+      .button:hover {
+        background-color: #45a049;
+      }
+      input[type="number"],
+      input[type="text"] {
+        width: 100%;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        border: 1px solid #ccc;
+      }
+      .listing {
+        padding: 1rem;
+        margin: 1rem 0;
+        border: 1px solid #ddd;
+        background-color: #fafafa;
+      }
+      .listing p {
+        margin: 0.5rem 0;
+      }
+      #status {
+        margin-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Digital Art Marketplace</h1>
+      <button class="button" id="connectWalletBtn">Connect Wallet</button>
+    </header>
+
+    <div class="container">
+      <div id="listingSection">
+        <h2>List Your Artwork for Sale</h2>
+        <input
+          type="text"
+          id="tokenIdInput"
+          placeholder="Enter Artwork Token ID"
+        />
+        <input
+          type="number"
+          id="priceInput"
+          placeholder="Enter Price (in tokens)"
+        />
+        <button class="button" id="listArtworkBtn">List Artwork</button>
+      </div>
+
+      <div id="buySection">
+        <h2>Buy Artwork</h2>
+        <input
+          type="text"
+          id="buyTokenIdInput"
+          placeholder="Enter Artwork Token ID to Buy"
+        />
+        <button class="button" id="buyArtworkBtn">Buy Artwork</button>
+      </div>
+
+      <div id="artworkListingsSection">
+        <h2>Artwork Listings</h2>
+        <div id="artworkListings"></div>
+      </div>
+
+      <div id="status"></div>
+    </div>
+
+    <script>
+      let web3;
+      let contract;
+      let userAccount;
+      const marketplaceAddress = "0x58ca40d77178b01de4f835fc4f7164c51fbd4585"; // Replace with your deployed contract address
+      const artNFTAddress = "0x84ACE0D40aef2e65aE6ABCa78BCd4a60a2b2BA7B"; // Replace with your art NFT contract address
+      const paymentTokenAddress = "0xaD350208b98c338846634728f88d8dC5b5F0067d"; // Replace with your payment token address
+      const contractABI = [
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "_artNFT",
+              type: "address",
+            },
+            {
+              internalType: "address",
+              name: "_paymentToken",
+              type: "address",
+            },
+          ],
+          stateMutability: "nonpayable",
+          type: "constructor",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "artist",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "price",
+              type: "uint256",
+            },
+          ],
+          name: "ArtworkListed",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "buyer",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "price",
+              type: "uint256",
+            },
+          ],
+          name: "ArtworkSold",
+          type: "event",
+        },
+        {
+          inputs: [],
+          name: "artNFT",
+          outputs: [
+            {
+              internalType: "contract IERC721",
+              name: "",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+          ],
+          name: "buyArtwork",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+          ],
+          name: "getArtworkListing",
+          outputs: [
+            {
+              internalType: "address",
+              name: "artist",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "price",
+              type: "uint256",
+            },
+            {
+              internalType: "bool",
+              name: "isSold",
+              type: "bool",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "price",
+              type: "uint256",
+            },
+          ],
+          name: "listArtwork",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          name: "listings",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              internalType: "address",
+              name: "artist",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "price",
+              type: "uint256",
+            },
+            {
+              internalType: "bool",
+              name: "isSold",
+              type: "bool",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: 
